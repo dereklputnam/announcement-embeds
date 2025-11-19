@@ -30,6 +30,7 @@ export default apiInitializer("1.8.0", (api) => {
         type: "GET",
         data: { url: url, refresh: false },
         cache: true,
+        dataType: "html", // IMPORTANT: Tell ajax to expect HTML, not JSON!
       });
 
       if (response && response.trim()) {
@@ -47,6 +48,16 @@ export default apiInitializer("1.8.0", (api) => {
       }
     } catch (error) {
       console.error("[Announcement Embeds] Onebox fetch failed:", error);
+
+      // Check if the error has responseText (which means we actually got data!)
+      if (error.responseText) {
+        console.log("[Announcement Embeds] Found HTML in error response, using it anyway");
+        const container = document.createElement("div");
+        container.classList.add("onebox-container", "rehydrated-media");
+        container.innerHTML = error.responseText;
+        return container;
+      }
+
       return null;
     }
   }
