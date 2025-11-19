@@ -1,10 +1,14 @@
 # Announcement Embeds - Wrap No-Email Media Fix
 
-A Discourse theme component that fixes the issue where `[wrap=no-email]` blocks prevent videos and media links from rendering as embedded players.
+A Discourse theme component that automatically embeds videos and media from **any source** inside `[wrap=no-email]` blocks, restoring the onebox functionality that Discourse strips away.
 
 ## Problem Statement
 
-By default, Discourse's `[wrap]` BBCode tags strip or escape inner HTML before the Markdown "onebox" pipeline runs. This causes video links to appear as plain URLs instead of embedded `<video>` players inside `[wrap=no-email]` blocks.
+By default, Discourse's `[wrap]` BBCode tags strip or escape inner HTML before the Markdown "onebox" pipeline runs. This causes:
+- Video links to appear as **plain text URLs** instead of embedded players
+- YouTube/Vimeo links to remain as **clickable text** instead of iframe embeds
+- Discourse-hosted media to **not display** inline
+- Any media URL that would normally "unfurl" to **stay collapsed**
 
 ## Solution
 
@@ -13,8 +17,17 @@ This theme component adds a JavaScript initializer that "rehydrates" embedded me
 ### How It Works
 
 1. **Client-Side Rehydration**: Uses the Discourse `api.decorateCookedElement()` hook to scan post content after rendering
-2. **Media Detection**: Finds video links (`.mp4`, `.webm`, `.mov`, `.m4v`) or Discourse-hosted media URLs
-3. **Dynamic Replacement**: Replaces plain text links with `<video>` elements that include playback controls
+2. **Universal Media Detection**: Automatically detects:
+   - Direct video files (`.mp4`, `.webm`, `.mov`, `.m4v`, `.avi`, `.mkv`, `.flv`, `.ogv`)
+   - YouTube links (`youtube.com`, `youtu.be`)
+   - Vimeo links (`vimeo.com`)
+   - Any video hosting platform (Dailymotion, Twitch, Streamable, Wistia, Vidyard, etc.)
+   - Discourse-hosted media (Azure CDN, CloudFront, or direct uploads)
+3. **Smart Embedding**: Creates the appropriate embed type:
+   - YouTube → iframe embed
+   - Vimeo → iframe embed
+   - Direct video files → native HTML5 `<video>` player
+   - Platform-hosted videos → native player with auto-detection
 4. **Automatic Execution**: Runs after every post render, including infinite scroll
 
 ## Installation
@@ -46,25 +59,54 @@ Once installed, the component works automatically. Simply use the `[wrap=no-emai
 [wrap=no-email]
 This content will be hidden from email notifications.
 
+Direct video file:
 https://example.com/video.mp4
+
+YouTube video:
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+Vimeo video:
+https://vimeo.com/123456789
+
+Discourse-hosted media:
+https://your-discourse.azurefd.net/discourseimages/video.mp4
 [/wrap]
 ```
 
-The video link will automatically render as an embedded video player for users viewing the post on the web.
+All video links will automatically render as embedded players for users viewing the post on the web.
 
 ### Supported Media Types
 
-- **Video formats**: `.mp4`, `.mov`, `.webm`, `.m4v`
-- **Discourse-hosted media**: Any media uploaded to Discourse (contains `discourseimages` in URL)
+#### **Video Files** (Native HTML5 Player)
+- `.mp4`, `.webm`, `.mov`, `.m4v`
+- `.avi`, `.mkv`, `.flv`, `.ogv`
+
+#### **Video Platforms** (Iframe Embeds)
+- **YouTube** (`youtube.com`, `youtu.be`)
+- **Vimeo** (`vimeo.com`)
+- **Dailymotion**, **Twitch**, **Streamable**
+- **Wistia**, **Vidyard**, **Brightcove**, **Kaltura**
+
+#### **Discourse-Hosted Media**
+- Any video uploaded to Discourse
+- Azure CDN (`azurefd.net`)
+- AWS CloudFront (`cloudfront.net`)
+- Generic CDN patterns
+
+#### **Team Video Sources**
+Works with **any video URL** your team uses! The component automatically detects video content from any hosting platform.
 
 ## Features
 
+- ✅ **Universal Support**: Works with YouTube, Vimeo, and any video hosting platform
 - ✅ **Automatic Detection**: Scans all `[wrap=no-email]` blocks for video links
-- ✅ **Responsive Design**: Videos scale properly on mobile and desktop
+- ✅ **Smart Embedding**: Uses appropriate player type (iframe vs native)
+- ✅ **Responsive Design**: Videos scale properly on mobile and desktop (16:9 aspect ratio)
 - ✅ **Accessibility**: Includes ARIA labels for screen readers
 - ✅ **Dark Mode Support**: Styling adapts to Discourse theme
 - ✅ **No Configuration Required**: Works out of the box
 - ✅ **Performance Optimized**: Only processes media links, minimal overhead
+- ✅ **Debug Logging**: Console messages for troubleshooting
 
 ## Configuration
 
