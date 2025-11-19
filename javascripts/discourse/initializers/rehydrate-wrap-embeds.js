@@ -28,7 +28,11 @@ export default apiInitializer("1.8.0", (api) => {
 
       const response = await ajax("/onebox", {
         type: "GET",
-        data: { url: url, refresh: false },
+        data: {
+          url: url,
+          refresh: false,
+          max_length: 500000, // Request full content, not truncated
+        },
         cache: true,
         dataType: "html", // IMPORTANT: Tell ajax to expect HTML, not JSON!
       });
