@@ -21,108 +21,6 @@ export default apiInitializer("1.8.0", (api) => {
     }
   }
 
-  // Helper: Extract topic ID from URL
-  function extractTopicId(url) {
-    const match = url.match(/\/t\/[^\/]+\/(\d+)/);
-    return match ? match[1] : null;
-  }
-
-  // Helper: Create expandable topic quote with truncated preview
-  async function createExpandableTopicQuote(url) {
-    const topicId = extractTopicId(url);
-    if (!topicId) {
-      console.log("[Announcement Embeds] Could not extract topic ID from URL");
-      return null;
-    }
-
-    try {
-      console.log("[Announcement Embeds] Fetching topic data for ID:", topicId);
-
-      const topicData = await ajax(`/t/${topicId}.json`, {
-        type: "GET",
-        cache: true,
-      });
-
-      if (!topicData || !topicData.post_stream || !topicData.post_stream.posts || !topicData.post_stream.posts[0]) {
-        console.log("[Announcement Embeds] Invalid topic data received");
-        return null;
-      }
-
-      const firstPost = topicData.post_stream.posts[0];
-      const topic = topicData;
-
-      console.log("[Announcement Embeds] Topic data received:", {
-        title: topic.title,
-        postLength: firstPost.cooked.length,
-      });
-
-      // Truncate content to ~500 characters
-      const fullContent = firstPost.cooked;
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = fullContent;
-      const textContent = tempDiv.textContent || tempDiv.innerText || '';
-      const needsTruncation = textContent.length > 500;
-
-      // Create truncated version by limiting text length
-      let truncatedContent = fullContent;
-      if (needsTruncation) {
-        const truncatedText = textContent.substring(0, 500);
-        // Find where to cut the HTML to match this text length
-        truncatedContent = fullContent.substring(0, fullContent.indexOf(truncatedText.substring(truncatedText.length - 50)) + 50) + '...';
-      }
-
-      // Build initial quote block with truncated content
-      const quoteHTML = `
-        <aside class='quote no-group' data-username='${firstPost.username}' data-post='${firstPost.post_number}' data-topic='${topic.id}'>
-          <div class='title'>
-            <div class='quote-controls'></div>
-            <img alt='' width='24' height='24' src='${firstPost.avatar_template.replace('{size}', '48')}' class='avatar'>
-            <div class="quote-title__text-content">
-              <a href='${url}'>${topic.title}</a>
-              ${topic.category_id ? `<a class='badge-category__wrapper' href='/c/${topic.category_id}'><span class='badge-category'>${topic.category_name || ''}</span></a>` : ''}
-            </div>
-          </div>
-          <blockquote class='quote-content'>
-            ${needsTruncation ? truncatedContent : fullContent}
-          </blockquote>
-          ${needsTruncation ? '<div class="expand-quote-btn"><button class="btn btn-flat show-more" title="expand quote">▼</button></div>' : ''}
-        </aside>
-      `;
-
-      const container = document.createElement("div");
-      container.classList.add("onebox-container", "rehydrated-media", "expandable-topic-quote");
-      container.innerHTML = quoteHTML;
-
-      // Add expand functionality if content was truncated
-      if (needsTruncation) {
-        const expandBtn = container.querySelector('.show-more');
-        const blockquote = container.querySelector('.quote-content');
-        let isExpanded = false;
-
-        if (expandBtn && blockquote) {
-          expandBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (!isExpanded) {
-              blockquote.innerHTML = fullContent;
-              expandBtn.textContent = '▲';
-              expandBtn.title = 'collapse quote';
-              isExpanded = true;
-            } else {
-              blockquote.innerHTML = truncatedContent;
-              expandBtn.textContent = '▼';
-              expandBtn.title = 'expand quote';
-              isExpanded = false;
-            }
-          });
-        }
-      }
-
-      return container;
-    } catch (error) {
-      console.error("[Announcement Embeds] Failed to fetch topic:", error);
-      return null;
-    }
-  }
 
   // Helper: Fetch and create onebox for a URL
   async function createOnebox(url, linkElement) {
@@ -388,10 +286,10 @@ export default apiInitializer("1.8.0", (api) => {
             isDiscourseTopic: isTopic,
           });
 
-          // Priority 1: Discourse topics (create expandable quote)
+          // Priority 1: Discourse topics (use onebox API)
           if (isTopic) {
-            console.log("[Announcement Embeds] Creating expandable Discourse topic quote");
-            embedElement = await createExpandableTopicQuote(url);
+            console.log("[Announcement Embeds] Fetching Discourse topic onebox");
+            embedElement = await createOnebox(url, link);
           }
           // Priority 2: YouTube
           else if (/youtube\.com|youtu\.be/i.test(url)) {
