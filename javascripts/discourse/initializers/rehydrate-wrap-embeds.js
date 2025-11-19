@@ -43,10 +43,30 @@ export default apiInitializer("1.8.0", (api) => {
 
         // Auto-expand collapsed oneboxes (remove truncation)
         setTimeout(() => {
-          const expandButton = container.querySelector('.onebox-body .show-more, .expand-quote');
+          // Try multiple possible expand button selectors
+          const selectors = [
+            'button.show-more',
+            '.show-more-button',
+            '.expand-quote',
+            'a.show-more',
+            '.quote .title .quote-controls button',
+            'aside.quote .show-more',
+          ];
+
+          let expandButton = null;
+          for (const selector of selectors) {
+            expandButton = container.querySelector(selector);
+            if (expandButton) {
+              console.log(`[Announcement Embeds] Found expand button with selector: ${selector}`);
+              break;
+            }
+          }
+
           if (expandButton) {
             console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
             expandButton.click();
+          } else {
+            console.log("[Announcement Embeds] No expand button found - onebox may already be fully expanded");
           }
         }, 100);
 
@@ -67,10 +87,30 @@ export default apiInitializer("1.8.0", (api) => {
 
         // Auto-expand collapsed oneboxes (remove truncation)
         setTimeout(() => {
-          const expandButton = container.querySelector('.onebox-body .show-more, .expand-quote');
+          // Try multiple possible expand button selectors
+          const selectors = [
+            'button.show-more',
+            '.show-more-button',
+            '.expand-quote',
+            'a.show-more',
+            '.quote .title .quote-controls button',
+            'aside.quote .show-more',
+          ];
+
+          let expandButton = null;
+          for (const selector of selectors) {
+            expandButton = container.querySelector(selector);
+            if (expandButton) {
+              console.log(`[Announcement Embeds] Found expand button with selector: ${selector}`);
+              break;
+            }
+          }
+
           if (expandButton) {
             console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
             expandButton.click();
+          } else {
+            console.log("[Announcement Embeds] No expand button found - onebox may already be fully expanded");
           }
         }, 100);
 
