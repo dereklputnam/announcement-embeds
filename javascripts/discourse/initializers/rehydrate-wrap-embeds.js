@@ -176,14 +176,16 @@ export default apiInitializer("1.8.0", (api) => {
 
       console.log(`[Announcement Embeds] Total wrap blocks found: ${wrapBlocks.length}`);
 
-      wrapBlocks.forEach((wrapBlock, blockIndex) => {
+      wrapBlocks.forEach(async (wrapBlock, blockIndex) => {
         console.log(`[Announcement Embeds] Processing block #${blockIndex + 1}`);
 
         // Find all links inside this wrap block
-        const links = wrapBlock.querySelectorAll('a[href]');
+        const links = Array.from(wrapBlock.querySelectorAll('a[href]'));
         console.log(`[Announcement Embeds] Found ${links.length} links`);
 
-        links.forEach(async (link, linkIndex) => {
+        // Process links sequentially to handle async operations
+        for (let linkIndex = 0; linkIndex < links.length; linkIndex++) {
+          const link = links[linkIndex];
           const url = link.href;
 
           // Skip if already processed
@@ -239,12 +241,17 @@ export default apiInitializer("1.8.0", (api) => {
           // If we created an embed, replace the link
           if (embedElement) {
             console.log("[Announcement Embeds] Replacing link with embed");
+            console.log("[Announcement Embeds] Link element before replace:", link);
+            console.log("[Announcement Embeds] Link parent before replace:", link.parentElement);
 
             // For oneboxes, don't wrap again (already has container)
             if (embedElement.classList.contains('onebox-container')) {
+              console.log("[Announcement Embeds] Replacing with onebox container");
               link.replaceWith(embedElement);
+              console.log("[Announcement Embeds] Onebox HTML:", embedElement.outerHTML.substring(0, 300));
             } else {
               // Create wrapper for video embeds
+              console.log("[Announcement Embeds] Replacing with video wrapper");
               const wrapper = document.createElement("div");
               wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
               wrapper.appendChild(embedElement);
@@ -252,10 +259,11 @@ export default apiInitializer("1.8.0", (api) => {
             }
 
             console.log("[Announcement Embeds] ✓ Embed created successfully");
+            console.log("[Announcement Embeds] Parent after replace:", embedElement.parentElement);
           } else {
             console.log("[Announcement Embeds] No embed created for this link");
           }
-        });
+        }
       });
 
       console.log("[Announcement Embeds] Processing complete");
