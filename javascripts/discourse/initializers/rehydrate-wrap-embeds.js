@@ -191,7 +191,7 @@ export default apiInitializer("1.8.0", (api) => {
           // Skip if already processed
           if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media, .onebox-container')) {
             console.log(`[Announcement Embeds] Link #${linkIndex + 1} already processed, skipping`);
-            return;
+            continue; // Skip to next link, don't exit the loop!
           }
 
           console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
