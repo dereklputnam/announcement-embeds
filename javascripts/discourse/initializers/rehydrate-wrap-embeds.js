@@ -27,8 +27,8 @@ export default apiInitializer("1.8.0", (api) => {
     return match ? match[1] : null;
   }
 
-  // Helper: Fetch full topic data and create expanded quote
-  async function createFullTopicQuote(url) {
+  // Helper: Create expandable topic quote with truncated preview
+  async function createExpandableTopicQuote(url) {
     const topicId = extractTopicId(url);
     if (!topicId) {
       console.log("[Announcement Embeds] Could not extract topic ID from URL");
@@ -36,7 +36,7 @@ export default apiInitializer("1.8.0", (api) => {
     }
 
     try {
-      console.log("[Announcement Embeds] Fetching full topic data for ID:", topicId);
+      console.log("[Announcement Embeds] Fetching topic data for ID:", topicId);
 
       const topicData = await ajax(`/t/${topicId}.json`, {
         type: "GET",
@@ -56,7 +56,22 @@ export default apiInitializer("1.8.0", (api) => {
         postLength: firstPost.cooked.length,
       });
 
-      // Build a full quote block (similar to Discourse's quote format)
+      // Truncate content to ~500 characters
+      const fullContent = firstPost.cooked;
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = fullContent;
+      const textContent = tempDiv.textContent || tempDiv.innerText || '';
+      const needsTruncation = textContent.length > 500;
+
+      // Create truncated version by limiting text length
+      let truncatedContent = fullContent;
+      if (needsTruncation) {
+        const truncatedText = textContent.substring(0, 500);
+        // Find where to cut the HTML to match this text length
+        truncatedContent = fullContent.substring(0, fullContent.indexOf(truncatedText.substring(truncatedText.length - 50)) + 50) + '...';
+      }
+
+      // Build initial quote block with truncated content
       const quoteHTML = `
         <aside class='quote no-group' data-username='${firstPost.username}' data-post='${firstPost.post_number}' data-topic='${topic.id}'>
           <div class='title'>
@@ -67,19 +82,44 @@ export default apiInitializer("1.8.0", (api) => {
               ${topic.category_id ? `<a class='badge-category__wrapper' href='/c/${topic.category_id}'><span class='badge-category'>${topic.category_name || ''}</span></a>` : ''}
             </div>
           </div>
-          <blockquote>
-            ${firstPost.cooked}
+          <blockquote class='quote-content'>
+            ${needsTruncation ? truncatedContent : fullContent}
           </blockquote>
+          ${needsTruncation ? '<div class="expand-quote-btn"><button class="btn btn-flat show-more" title="expand quote">▼</button></div>' : ''}
         </aside>
       `;
 
       const container = document.createElement("div");
-      container.classList.add("onebox-container", "rehydrated-media", "full-topic-quote");
+      container.classList.add("onebox-container", "rehydrated-media", "expandable-topic-quote");
       container.innerHTML = quoteHTML;
+
+      // Add expand functionality if content was truncated
+      if (needsTruncation) {
+        const expandBtn = container.querySelector('.show-more');
+        const blockquote = container.querySelector('.quote-content');
+        let isExpanded = false;
+
+        if (expandBtn && blockquote) {
+          expandBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (!isExpanded) {
+              blockquote.innerHTML = fullContent;
+              expandBtn.textContent = '▲';
+              expandBtn.title = 'collapse quote';
+              isExpanded = true;
+            } else {
+              blockquote.innerHTML = truncatedContent;
+              expandBtn.textContent = '▼';
+              expandBtn.title = 'expand quote';
+              isExpanded = false;
+            }
+          });
+        }
+      }
 
       return container;
     } catch (error) {
-      console.error("[Announcement Embeds] Failed to fetch full topic:", error);
+      console.error("[Announcement Embeds] Failed to fetch topic:", error);
       return null;
     }
   }
@@ -348,10 +388,10 @@ export default apiInitializer("1.8.0", (api) => {
             isDiscourseTopic: isTopic,
           });
 
-          // Priority 1: Discourse topics (fetch full topic data)
+          // Priority 1: Discourse topics (create expandable quote)
           if (isTopic) {
-            console.log("[Announcement Embeds] Fetching full Discourse topic");
-            embedElement = await createFullTopicQuote(url);
+            console.log("[Announcement Embeds] Creating expandable Discourse topic quote");
+            embedElement = await createExpandableTopicQuote(url);
           }
           // Priority 2: YouTube
           else if (/youtube\.com|youtu\.be/i.test(url)) {
