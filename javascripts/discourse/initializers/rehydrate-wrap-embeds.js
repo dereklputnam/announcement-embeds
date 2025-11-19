@@ -41,6 +41,15 @@ export default apiInitializer("1.8.0", (api) => {
         container.classList.add("onebox-container", "rehydrated-media");
         container.innerHTML = response;
 
+        // Auto-expand collapsed oneboxes (remove truncation)
+        setTimeout(() => {
+          const expandButton = container.querySelector('.onebox-body .show-more, .expand-quote');
+          if (expandButton) {
+            console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
+            expandButton.click();
+          }
+        }, 100);
+
         return container;
       } else {
         console.log("[Announcement Embeds] Empty onebox response");
@@ -55,6 +64,16 @@ export default apiInitializer("1.8.0", (api) => {
         const container = document.createElement("div");
         container.classList.add("onebox-container", "rehydrated-media");
         container.innerHTML = error.responseText;
+
+        // Auto-expand collapsed oneboxes (remove truncation)
+        setTimeout(() => {
+          const expandButton = container.querySelector('.onebox-body .show-more, .expand-quote');
+          if (expandButton) {
+            console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
+            expandButton.click();
+          }
+        }, 100);
+
         return container;
       }
 
