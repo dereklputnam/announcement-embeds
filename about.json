@@ -1,0 +1,12 @@
+{
+  "name": "Announcement Embeds - Wrap No-Email Media Fix",
+  "about_url": "https://github.com/dereklputnam/announcement-embeds",
+  "license_url": "https://github.com/dereklputnam/announcement-embeds/blob/main/LICENSE",
+  "authors": "Derek Putnam",
+  "theme_version": "1.0.0",
+  "minimum_discourse_version": "3.0.0",
+  "maximum_discourse_version": null,
+  "component": true,
+  "assets": {},
+  "color_schemes": {}
+}
