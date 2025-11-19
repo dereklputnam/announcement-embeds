@@ -21,6 +21,69 @@ export default apiInitializer("1.8.0", (api) => {
     }
   }
 
+  // Helper: Extract topic ID from URL
+  function extractTopicId(url) {
+    const match = url.match(/\/t\/[^\/]+\/(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  // Helper: Fetch full topic data and create expanded quote
+  async function createFullTopicQuote(url) {
+    const topicId = extractTopicId(url);
+    if (!topicId) {
+      console.log("[Announcement Embeds] Could not extract topic ID from URL");
+      return null;
+    }
+
+    try {
+      console.log("[Announcement Embeds] Fetching full topic data for ID:", topicId);
+
+      const topicData = await ajax(`/t/${topicId}.json`, {
+        type: "GET",
+        cache: true,
+      });
+
+      if (!topicData || !topicData.post_stream || !topicData.post_stream.posts || !topicData.post_stream.posts[0]) {
+        console.log("[Announcement Embeds] Invalid topic data received");
+        return null;
+      }
+
+      const firstPost = topicData.post_stream.posts[0];
+      const topic = topicData;
+
+      console.log("[Announcement Embeds] Topic data received:", {
+        title: topic.title,
+        postLength: firstPost.cooked.length,
+      });
+
+      // Build a full quote block (similar to Discourse's quote format)
+      const quoteHTML = `
+        <aside class='quote no-group' data-username='${firstPost.username}' data-post='${firstPost.post_number}' data-topic='${topic.id}'>
+          <div class='title'>
+            <div class='quote-controls'></div>
+            <img alt='' width='24' height='24' src='${firstPost.avatar_template.replace('{size}', '48')}' class='avatar'>
+            <div class="quote-title__text-content">
+              <a href='${url}'>${topic.title}</a>
+              ${topic.category_id ? `<a class='badge-category__wrapper' href='/c/${topic.category_id}'><span class='badge-category'>${topic.category_name || ''}</span></a>` : ''}
+            </div>
+          </div>
+          <blockquote>
+            ${firstPost.cooked}
+          </blockquote>
+        </aside>
+      `;
+
+      const container = document.createElement("div");
+      container.classList.add("onebox-container", "rehydrated-media", "full-topic-quote");
+      container.innerHTML = quoteHTML;
+
+      return container;
+    } catch (error) {
+      console.error("[Announcement Embeds] Failed to fetch full topic:", error);
+      return null;
+    }
+  }
+
   // Helper: Fetch and create onebox for a URL
   async function createOnebox(url, linkElement) {
     try {
@@ -31,7 +94,6 @@ export default apiInitializer("1.8.0", (api) => {
         data: {
           url: url,
           refresh: false,
-          max_length: 500000, // Request full content, not truncated
         },
         cache: true,
         dataType: "html", // IMPORTANT: Tell ajax to expect HTML, not JSON!
@@ -286,10 +348,10 @@ export default apiInitializer("1.8.0", (api) => {
             isDiscourseTopic: isTopic,
           });
 
-          // Priority 1: Discourse topics (use onebox API)
+          // Priority 1: Discourse topics (fetch full topic data)
           if (isTopic) {
-            console.log("[Announcement Embeds] Fetching Discourse topic onebox");
-            embedElement = await createOnebox(url, link);
+            console.log("[Announcement Embeds] Fetching full Discourse topic");
+            embedElement = await createFullTopicQuote(url);
           }
           // Priority 2: YouTube
           else if (/youtube\.com|youtu\.be/i.test(url)) {

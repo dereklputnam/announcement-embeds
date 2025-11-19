@@ -58,6 +58,64 @@
         }
       }
     }
+
+    // Full topic quotes (expanded content)
+    &.full-topic-quote {
+      aside.quote {
+        border-left: 5px solid var(--primary-low-mid);
+        background: var(--primary-very-low);
+        padding: 12px;
+        margin: 0;
+
+        .title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 12px;
+          font-weight: bold;
+
+          .avatar {
+            border-radius: 50%;
+          }
+
+          .quote-title__text-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+          }
+
+          .badge-category__wrapper {
+            display: inline-flex;
+            align-items: center;
+
+            .badge-category {
+              padding: 2px 8px;
+              border-radius: 3px;
+              font-size: 0.857rem;
+              background: var(--primary-low);
+              color: var(--primary);
+            }
+          }
+        }
+
+        blockquote {
+          margin: 0;
+          padding: 0;
+          border: none;
+
+          // Preserve formatting of quoted content
+          p {
+            margin: 0.5em 0;
+          }
+
+          img {
+            max-width: 100%;
+            height: auto;
+          }
+        }
+      }
+    }
   }
 
   // Optional: Add a subtle loading state
