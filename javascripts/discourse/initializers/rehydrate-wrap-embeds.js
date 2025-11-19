@@ -7,6 +7,50 @@ export default apiInitializer("1.8.0", (api) => {
     return /\.(mp4|mov|webm|m4v|avi|mkv|flv|ogv)$/i.test(url);
   }
 
+  // Helper: Check if URL is a Discourse topic/post
+  function isDiscourseTopic(url) {
+    // Check if URL is from the same Discourse instance or matches topic patterns
+    try {
+      const urlObj = new URL(url);
+      const currentHost = window.location.host;
+
+      // Same host or contains /t/ (topic) pattern
+      return urlObj.host === currentHost && /\/t\//.test(url);
+    } catch {
+      return false;
+    }
+  }
+
+  // Helper: Fetch and create onebox for a URL
+  async function createOnebox(url, linkElement) {
+    try {
+      console.log("[Announcement Embeds] Fetching onebox for:", url);
+
+      const response = await ajax("/onebox", {
+        type: "GET",
+        data: { url: url, refresh: false },
+        cache: true,
+      });
+
+      if (response && response.trim()) {
+        console.log("[Announcement Embeds] Onebox HTML received, length:", response.length);
+
+        // Create a container for the onebox
+        const container = document.createElement("div");
+        container.classList.add("onebox-container", "rehydrated-media");
+        container.innerHTML = response;
+
+        return container;
+      } else {
+        console.log("[Announcement Embeds] Empty onebox response");
+        return null;
+      }
+    } catch (error) {
+      console.error("[Announcement Embeds] Onebox fetch failed:", error);
+      return null;
+    }
+  }
+
   // Helper: Check if URL is a known video platform
   function isVideoHostingPlatform(url) {
     const videoPatterns = [
@@ -139,11 +183,11 @@ export default apiInitializer("1.8.0", (api) => {
         const links = wrapBlock.querySelectorAll('a[href]');
         console.log(`[Announcement Embeds] Found ${links.length} links`);
 
-        links.forEach((link, linkIndex) => {
+        links.forEach(async (link, linkIndex) => {
           const url = link.href;
 
           // Skip if already processed
-          if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media')) {
+          if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media, .onebox-container')) {
             console.log(`[Announcement Embeds] Link #${linkIndex + 1} already processed, skipping`);
             return;
           }
@@ -155,6 +199,7 @@ export default apiInitializer("1.8.0", (api) => {
           // Check what type of media this is
           const isVideo = isVideoFile(url);
           const isHostedVideo = isVideoHostingPlatform(url);
+          const isTopic = isDiscourseTopic(url);
 
           console.log(`[Announcement Embeds] Detection:`, {
             url: url.substring(0, 80) + '...',
@@ -162,35 +207,50 @@ export default apiInitializer("1.8.0", (api) => {
             isHostedVideo: isHostedVideo,
             isYouTube: /youtube\.com|youtu\.be/i.test(url),
             isVimeo: /vimeo\.com/i.test(url),
+            isDiscourseTopic: isTopic,
           });
 
-          // Priority 1: YouTube
-          if (/youtube\.com|youtu\.be/i.test(url)) {
+          // Priority 1: Discourse topics (use onebox API)
+          if (isTopic) {
+            console.log("[Announcement Embeds] Fetching Discourse topic onebox");
+            embedElement = await createOnebox(url, link);
+          }
+          // Priority 2: YouTube
+          else if (/youtube\.com|youtu\.be/i.test(url)) {
             console.log("[Announcement Embeds] Creating YouTube embed");
             embedElement = createYouTubeEmbed(url);
           }
-          // Priority 2: Vimeo
+          // Priority 3: Vimeo
           else if (/vimeo\.com/i.test(url)) {
             console.log("[Announcement Embeds] Creating Vimeo embed");
             embedElement = createVimeoEmbed(url);
           }
-          // Priority 3: Direct video files or hosted video
+          // Priority 4: Direct video files or hosted video
           else if (isVideo || isHostedVideo) {
             console.log("[Announcement Embeds] Creating native video player");
             embedElement = createVideoPlayer(url);
+          }
+          // Priority 5: Try onebox for any other URL (optional - might be too aggressive)
+          else if (link.textContent.trim() === url || link.textContent.includes('http')) {
+            console.log("[Announcement Embeds] Attempting onebox for generic URL");
+            embedElement = await createOnebox(url, link);
           }
 
           // If we created an embed, replace the link
           if (embedElement) {
             console.log("[Announcement Embeds] Replacing link with embed");
 
-            // Create wrapper
-            const wrapper = document.createElement("div");
-            wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
-            wrapper.appendChild(embedElement);
+            // For oneboxes, don't wrap again (already has container)
+            if (embedElement.classList.contains('onebox-container')) {
+              link.replaceWith(embedElement);
+            } else {
+              // Create wrapper for video embeds
+              const wrapper = document.createElement("div");
+              wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
+              wrapper.appendChild(embedElement);
+              link.replaceWith(wrapper);
+            }
 
-            // Replace the link
-            link.replaceWith(wrapper);
             console.log("[Announcement Embeds] ✓ Embed created successfully");
           } else {
             console.log("[Announcement Embeds] No embed created for this link");

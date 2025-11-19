@@ -35,6 +35,31 @@
     }
   }
 
+  // Rehydrated oneboxes (topic previews, external links, etc.)
+  .onebox-container.rehydrated-media {
+    margin: 1em 0;
+
+    // Inherit Discourse's default onebox styling
+    .onebox {
+      border: 1px solid var(--primary-low);
+      border-radius: 8px;
+      margin: 0;
+    }
+
+    // Aside-style oneboxes (topic links)
+    aside.onebox {
+      background: var(--primary-very-low);
+      padding: 12px;
+
+      .onebox-body {
+        img {
+          max-width: 20%;
+          max-height: 80px;
+        }
+      }
+    }
+  }
+
   // Optional: Add a subtle loading state
   .media-embed-wrapper.rehydrated-media video:not([src]),
   .video-wrapper.rehydrated-media video:not([src]) {
