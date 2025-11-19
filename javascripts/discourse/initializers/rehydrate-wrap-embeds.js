@@ -1,95 +1,188 @@
 import { apiInitializer } from "discourse/lib/api";
+import { ajax } from "discourse/lib/ajax";
 
 export default apiInitializer("1.8.0", (api) => {
+  // Helper: Check if URL is a video file
+  function isVideoFile(url) {
+    return /\.(mp4|mov|webm|m4v|avi|mkv|flv|ogv)$/i.test(url);
+  }
+
+  // Helper: Check if URL is a known video platform
+  function isVideoHostingPlatform(url) {
+    const videoPatterns = [
+      /youtube\.com\/watch/i,
+      /youtu\.be\//i,
+      /vimeo\.com\//i,
+      /dailymotion\.com\//i,
+      /twitch\.tv\//i,
+      /streamable\.com\//i,
+      /wistia\.(com|net)/i,
+      /vidyard\.com\//i,
+      /brightcove\.(com|net)/i,
+      /kaltura\.com\//i,
+      /discourseimages/i, // Discourse-hosted media
+      /azurefd\.net/i, // Azure CDN (common for Discourse)
+      /cloudfront\.net/i, // AWS CloudFront
+      /cdn\./i, // Generic CDN pattern
+    ];
+
+    return videoPatterns.some(pattern => pattern.test(url));
+  }
+
+  // Helper: Create native video player
+  function createVideoPlayer(url) {
+    const video = document.createElement("video");
+    video.src = url;
+    video.controls = true;
+    video.preload = "metadata";
+    video.style.maxWidth = "100%";
+    video.style.borderRadius = "8px";
+    video.style.display = "block";
+    video.style.margin = "1em auto";
+    video.setAttribute('aria-label', `Video: ${url.split('/').pop()}`);
+
+    // Error handling
+    video.addEventListener('error', (e) => {
+      console.error("[Announcement Embeds] Video failed to load:", url, e);
+    });
+
+    video.addEventListener('loadedmetadata', () => {
+      console.log("[Announcement Embeds] Video loaded:", url);
+    });
+
+    return video;
+  }
+
+  // Helper: Create YouTube embed
+  function createYouTubeEmbed(url) {
+    let videoId;
+
+    // Extract video ID from various YouTube URL formats
+    if (url.includes('youtube.com')) {
+      const urlParams = new URLSearchParams(new URL(url).search);
+      videoId = urlParams.get('v');
+    } else if (url.includes('youtu.be')) {
+      videoId = url.split('youtu.be/')[1]?.split('?')[0];
+    }
+
+    if (!videoId) return null;
+
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.youtube.com/embed/${videoId}`;
+    iframe.width = "560";
+    iframe.height = "315";
+    iframe.style.maxWidth = "100%";
+    iframe.style.borderRadius = "8px";
+    iframe.style.display = "block";
+    iframe.style.margin = "1em auto";
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+
+    return iframe;
+  }
+
+  // Helper: Create Vimeo embed
+  function createVimeoEmbed(url) {
+    const match = url.match(/vimeo\.com\/(\d+)/i);
+    if (!match) return null;
+
+    const videoId = match[1];
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://player.vimeo.com/video/${videoId}`;
+    iframe.width = "560";
+    iframe.height = "315";
+    iframe.style.maxWidth = "100%";
+    iframe.style.borderRadius = "8px";
+    iframe.style.display = "block";
+    iframe.style.margin = "1em auto";
+    iframe.setAttribute('frameborder', '0');
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+
+    return iframe;
+  }
+
+  // Main decorator
   api.decorateCookedElement(
     (elem) => {
-      // Debug: Log when the decorator runs
-      console.log("[Announcement Embeds] Decorator running on element:", elem);
+      console.log("[Announcement Embeds] Decorator running");
 
       // Find all .wrap.no-email blocks
       const wrapBlocks = elem.querySelectorAll('.wrap.no-email');
-      console.log("[Announcement Embeds] Found wrap.no-email blocks:", wrapBlocks.length);
+      console.log(`[Announcement Embeds] Found ${wrapBlocks.length} wrap.no-email blocks`);
 
-      wrapBlocks.forEach((wrapBlock, index) => {
-        console.log(`[Announcement Embeds] Processing wrap block #${index + 1}`);
-        console.log("[Announcement Embeds] Wrap block HTML:", wrapBlock.innerHTML.substring(0, 500));
+      wrapBlocks.forEach((wrapBlock, blockIndex) => {
+        console.log(`[Announcement Embeds] Processing block #${blockIndex + 1}`);
 
         // Find all links inside this wrap block
         const links = wrapBlock.querySelectorAll('a[href]');
-        console.log(`[Announcement Embeds] Found ${links.length} links in wrap block #${index + 1}`);
+        console.log(`[Announcement Embeds] Found ${links.length} links`);
 
         links.forEach((link, linkIndex) => {
           const url = link.href;
-          console.log(`[Announcement Embeds] Link #${linkIndex + 1}:`, url);
 
-          // Check if the link points to a video file or Discourse-hosted media
-          const isVideo = url.match(/\.(mp4|mov|webm|m4v)$/i);
-          const isDiscourseAsset = url.includes("discourseimages");
-          const isAzureCDN = url.includes("azurefd.net");
+          // Skip if already processed
+          if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media')) {
+            console.log(`[Announcement Embeds] Link #${linkIndex + 1} already processed, skipping`);
+            return;
+          }
 
-          console.log(`[Announcement Embeds] URL analysis:`, {
-            url,
-            isVideo: !!isVideo,
-            isDiscourseAsset,
-            isAzureCDN,
-            shouldConvert: !!(isVideo || isDiscourseAsset)
+          console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
+
+          let embedElement = null;
+
+          // Check what type of media this is
+          const isVideo = isVideoFile(url);
+          const isHostedVideo = isVideoHostingPlatform(url);
+
+          console.log(`[Announcement Embeds] Detection:`, {
+            url: url.substring(0, 80) + '...',
+            isVideoFile: isVideo,
+            isHostedVideo: isHostedVideo,
+            isYouTube: /youtube\.com|youtu\.be/i.test(url),
+            isVimeo: /vimeo\.com/i.test(url),
           });
 
-          if (isVideo || isDiscourseAsset) {
-            // Only convert if the link hasn't already been replaced
-            const alreadyConverted = link.closest('.video-wrapper');
+          // Priority 1: YouTube
+          if (/youtube\.com|youtu\.be/i.test(url)) {
+            console.log("[Announcement Embeds] Creating YouTube embed");
+            embedElement = createYouTubeEmbed(url);
+          }
+          // Priority 2: Vimeo
+          else if (/vimeo\.com/i.test(url)) {
+            console.log("[Announcement Embeds] Creating Vimeo embed");
+            embedElement = createVimeoEmbed(url);
+          }
+          // Priority 3: Direct video files or hosted video
+          else if (isVideo || isHostedVideo) {
+            console.log("[Announcement Embeds] Creating native video player");
+            embedElement = createVideoPlayer(url);
+          }
 
-            if (alreadyConverted) {
-              console.log("[Announcement Embeds] Link already converted, skipping");
-              return;
-            }
+          // If we created an embed, replace the link
+          if (embedElement) {
+            console.log("[Announcement Embeds] Replacing link with embed");
 
-            console.log("[Announcement Embeds] Converting link to video player");
-
-            // Create video element
-            const video = document.createElement("video");
-            video.src = url;
-            video.controls = true;
-            video.preload = "metadata";
-            video.style.maxWidth = "100%";
-            video.style.borderRadius = "8px";
-            video.style.display = "block";
-            video.style.margin = "1em auto";
-
-            // Add accessibility attributes
-            video.setAttribute('aria-label', `Video: ${url.split('/').pop()}`);
-
-            // Add error handling for debugging
-            video.addEventListener('error', (e) => {
-              console.error("[Announcement Embeds] Video failed to load:", url);
-              console.error("[Announcement Embeds] Error details:", e);
-            });
-
-            video.addEventListener('loadedmetadata', () => {
-              console.log("[Announcement Embeds] Video metadata loaded successfully:", url);
-            });
-
-            // Create wrapper for easier styling
+            // Create wrapper
             const wrapper = document.createElement("div");
-            wrapper.classList.add('video-wrapper', 'rehydrated-media');
-            wrapper.appendChild(video);
+            wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
+            wrapper.appendChild(embedElement);
 
-            // Replace the link with the video wrapper
-            console.log("[Announcement Embeds] Replacing link with video wrapper");
+            // Replace the link
             link.replaceWith(wrapper);
-
-            console.log("[Announcement Embeds] Video conversion complete");
+            console.log("[Announcement Embeds] ✓ Embed created successfully");
           } else {
-            console.log("[Announcement Embeds] Link does not match video criteria, skipping");
+            console.log("[Announcement Embeds] No embed created for this link");
           }
         });
       });
 
-      console.log("[Announcement Embeds] Decorator finished");
+      console.log("[Announcement Embeds] Processing complete");
     },
     {
       id: "rehydrate-wrap-embeds",
-      onlyStream: false // Apply to all posts, not just stream
+      onlyStream: false,
     }
   );
 });

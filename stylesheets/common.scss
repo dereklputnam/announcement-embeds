@@ -1,10 +1,13 @@
 // Styling for rehydrated media embeds inside [wrap=no-email] blocks
 
 .wrap.no-email {
+  // Support both wrapper classes (backward compatibility)
+  .media-embed-wrapper.rehydrated-media,
   .video-wrapper.rehydrated-media {
     margin: 1em 0;
     text-align: center;
 
+    // Native HTML5 video elements
     video {
       max-width: 100%;
       height: auto;
@@ -17,9 +20,23 @@
         border-radius: 4px;
       }
     }
+
+    // YouTube, Vimeo, and other iframe embeds
+    iframe {
+      max-width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+      @media (max-width: 768px) {
+        border-radius: 4px;
+      }
+    }
   }
 
   // Optional: Add a subtle loading state
+  .media-embed-wrapper.rehydrated-media video:not([src]),
   .video-wrapper.rehydrated-media video:not([src]) {
     background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
     background-size: 200% 100%;
@@ -38,7 +55,13 @@
 
 // Dark mode support
 .theme-dark {
-  .wrap.no-email .video-wrapper.rehydrated-media video {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  .wrap.no-email {
+    .media-embed-wrapper.rehydrated-media,
+    .video-wrapper.rehydrated-media {
+      video,
+      iframe {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+    }
   }
 }
