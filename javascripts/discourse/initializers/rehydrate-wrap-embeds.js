@@ -107,10 +107,30 @@ export default apiInitializer("1.8.0", (api) => {
   api.decorateCookedElement(
     (elem) => {
       console.log("[Announcement Embeds] Decorator running");
+      console.log("[Announcement Embeds] Element HTML (first 1000 chars):", elem.innerHTML.substring(0, 1000));
 
-      // Find all .wrap.no-email blocks
-      const wrapBlocks = elem.querySelectorAll('.wrap.no-email');
-      console.log(`[Announcement Embeds] Found ${wrapBlocks.length} wrap.no-email blocks`);
+      // Try multiple possible selectors for wrap=no-email blocks
+      const selectors = [
+        '.wrap.no-email',           // Standard: <div class="wrap no-email">
+        '.wrap[data-wrap="no-email"]', // Data attribute variant
+        '[class*="no-email"]',      // Any class containing "no-email"
+        '.no-email',                // Just the no-email class
+        '[data-wrap*="no-email"]',  // Data attribute containing "no-email"
+      ];
+
+      let wrapBlocks = [];
+      for (const selector of selectors) {
+        const found = elem.querySelectorAll(selector);
+        if (found.length > 0) {
+          console.log(`[Announcement Embeds] ✓ Found ${found.length} blocks with selector: ${selector}`);
+          wrapBlocks = Array.from(found);
+          break;
+        } else {
+          console.log(`[Announcement Embeds] ✗ No blocks found with selector: ${selector}`);
+        }
+      }
+
+      console.log(`[Announcement Embeds] Total wrap blocks found: ${wrapBlocks.length}`);
 
       wrapBlocks.forEach((wrapBlock, blockIndex) => {
         console.log(`[Announcement Embeds] Processing block #${blockIndex + 1}`);
