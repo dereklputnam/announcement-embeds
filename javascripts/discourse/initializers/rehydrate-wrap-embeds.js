@@ -268,6 +268,18 @@ export default apiInitializer("1.8.0", (api) => {
             continue; // Skip to next link, don't exit the loop!
           }
 
+          // Skip heading anchor links (e.g., #heading-name)
+          if (url.includes('#') && url.split('#')[0] === window.location.href.split('#')[0]) {
+            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is a heading anchor, skipping`);
+            continue;
+          }
+
+          // Skip if link is inside a heading element
+          if (link.closest('h1, h2, h3, h4, h5, h6')) {
+            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is inside a heading, skipping`);
+            continue;
+          }
+
           console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
 
           let embedElement = null;
