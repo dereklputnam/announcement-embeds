@@ -294,12 +294,41 @@ export default apiInitializer("1.8.0", (api) => {
 
           console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
 
+          // Helper: Check if link is standalone (on its own line, not inline with text)
+          const isStandaloneLink = (linkElement) => {
+            const parent = linkElement.parentElement;
+            if (!parent) return false;
+
+            // Check if the link is in a paragraph by itself
+            if (parent.tagName === 'P') {
+              // Get all text nodes and elements in the paragraph
+              const children = Array.from(parent.childNodes);
+
+              // If paragraph only contains this link (and maybe whitespace), it's standalone
+              const hasOtherContent = children.some(node => {
+                if (node === linkElement) return false;
+                if (node.nodeType === Node.TEXT_NODE) {
+                  return node.textContent.trim().length > 0;
+                }
+                if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR') {
+                  return true;
+                }
+                return false;
+              });
+
+              return !hasOtherContent;
+            }
+
+            return false;
+          };
+
           let embedElement = null;
 
           // Check what type of media this is
           const isVideo = isVideoFile(url);
           const isHostedVideo = isVideoHostingPlatform(url);
           const isTopic = isDiscourseTopic(url);
+          const isStandalone = isStandaloneLink(link);
 
           console.log(`[Announcement Embeds] Detection:`, {
             url: url.substring(0, 80) + '...',
@@ -308,11 +337,12 @@ export default apiInitializer("1.8.0", (api) => {
             isYouTube: /youtube\.com|youtu\.be/i.test(url),
             isVimeo: /vimeo\.com/i.test(url),
             isDiscourseTopic: isTopic,
+            isStandalone: isStandalone,
           });
 
-          // Priority 1: Discourse topics (use onebox API)
-          if (isTopic) {
-            console.log("[Announcement Embeds] Fetching Discourse topic onebox");
+          // Priority 1: Discourse topics (use onebox API) - ONLY for standalone links
+          if (isTopic && isStandalone) {
+            console.log("[Announcement Embeds] Fetching Discourse topic onebox (standalone link)");
             embedElement = await createOnebox(url, link);
           }
           // Priority 2: YouTube
@@ -330,9 +360,9 @@ export default apiInitializer("1.8.0", (api) => {
             console.log("[Announcement Embeds] Creating native video player");
             embedElement = createVideoPlayer(url);
           }
-          // Priority 5: Try onebox for any other URL (optional - might be too aggressive)
-          else if (link.textContent.trim() === url || link.textContent.includes('http')) {
-            console.log("[Announcement Embeds] Attempting onebox for generic URL");
+          // Priority 5: Try onebox for any other URL - ONLY for standalone links
+          else if (isStandalone && (link.textContent.trim() === url || link.textContent.includes('http'))) {
+            console.log("[Announcement Embeds] Attempting onebox for generic standalone URL");
             embedElement = await createOnebox(url, link);
           }
 
