@@ -280,6 +280,18 @@ export default apiInitializer("1.8.0", (api) => {
             continue;
           }
 
+          // Skip Discourse internal upload URLs (upload://xxxxx)
+          if (url.startsWith('upload://') || url.includes('/upload://')) {
+            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is a Discourse upload URL, skipping`);
+            continue;
+          }
+
+          // Skip image links (links that contain an img element)
+          if (link.querySelector('img')) {
+            console.log(`[Announcement Embeds] Link #${linkIndex + 1} contains an image element, skipping`);
+            continue;
+          }
+
           console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
 
           let embedElement = null;
