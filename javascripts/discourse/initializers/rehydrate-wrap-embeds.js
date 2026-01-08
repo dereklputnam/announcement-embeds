@@ -23,10 +23,8 @@ export default apiInitializer("1.8.0", (api) => {
 
 
   // Helper: Fetch and create onebox for a URL
-  async function createOnebox(url, linkElement) {
+  async function createOnebox(url) {
     try {
-      console.log("[Announcement Embeds] Fetching onebox for:", url);
-
       const response = await ajax("/onebox", {
         type: "GET",
         data: {
@@ -38,8 +36,6 @@ export default apiInitializer("1.8.0", (api) => {
       });
 
       if (response && response.trim()) {
-        console.log("[Announcement Embeds] Onebox HTML received, length:", response.length);
-
         // Create a container for the onebox
         const container = document.createElement("div");
         container.classList.add("onebox-container", "rehydrated-media");
@@ -61,30 +57,20 @@ export default apiInitializer("1.8.0", (api) => {
           for (const selector of selectors) {
             expandButton = container.querySelector(selector);
             if (expandButton) {
-              console.log(`[Announcement Embeds] Found expand button with selector: ${selector}`);
+              expandButton.click();
               break;
             }
-          }
-
-          if (expandButton) {
-            console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
-            expandButton.click();
-          } else {
-            console.log("[Announcement Embeds] No expand button found - onebox may already be fully expanded");
           }
         }, 100);
 
         return container;
-      } else {
-        console.log("[Announcement Embeds] Empty onebox response");
-        return null;
       }
+      return null;
     } catch (error) {
       console.error("[Announcement Embeds] Onebox fetch failed:", error);
 
       // Check if the error has responseText (which means we actually got data!)
       if (error.responseText) {
-        console.log("[Announcement Embeds] Found HTML in error response, using it anyway");
         const container = document.createElement("div");
         container.classList.add("onebox-container", "rehydrated-media");
         container.innerHTML = error.responseText;
@@ -105,16 +91,9 @@ export default apiInitializer("1.8.0", (api) => {
           for (const selector of selectors) {
             expandButton = container.querySelector(selector);
             if (expandButton) {
-              console.log(`[Announcement Embeds] Found expand button with selector: ${selector}`);
+              expandButton.click();
               break;
             }
-          }
-
-          if (expandButton) {
-            console.log("[Announcement Embeds] Auto-expanding collapsed onebox");
-            expandButton.click();
-          } else {
-            console.log("[Announcement Embeds] No expand button found - onebox may already be fully expanded");
           }
         }, 100);
 
@@ -162,10 +141,6 @@ export default apiInitializer("1.8.0", (api) => {
     // Error handling
     video.addEventListener('error', (e) => {
       console.error("[Announcement Embeds] Video failed to load:", url, e);
-    });
-
-    video.addEventListener('loadedmetadata', () => {
-      console.log("[Announcement Embeds] Video loaded:", url);
     });
 
     return video;
@@ -224,9 +199,6 @@ export default apiInitializer("1.8.0", (api) => {
   // Main decorator
   api.decorateCookedElement(
     (elem) => {
-      console.log("[Announcement Embeds] Decorator running");
-      console.log("[Announcement Embeds] Element HTML (first 1000 chars):", elem.innerHTML.substring(0, 1000));
-
       // Try multiple possible selectors for wrap=no-email blocks
       const selectors = [
         '.wrap.no-email',           // Standard: <div class="wrap no-email">
@@ -240,22 +212,16 @@ export default apiInitializer("1.8.0", (api) => {
       for (const selector of selectors) {
         const found = elem.querySelectorAll(selector);
         if (found.length > 0) {
-          console.log(`[Announcement Embeds] ✓ Found ${found.length} blocks with selector: ${selector}`);
           wrapBlocks = Array.from(found);
           break;
-        } else {
-          console.log(`[Announcement Embeds] ✗ No blocks found with selector: ${selector}`);
         }
       }
 
-      console.log(`[Announcement Embeds] Total wrap blocks found: ${wrapBlocks.length}`);
+      if (wrapBlocks.length === 0) return;
 
-      wrapBlocks.forEach(async (wrapBlock, blockIndex) => {
-        console.log(`[Announcement Embeds] Processing block #${blockIndex + 1}`);
-
+      wrapBlocks.forEach(async (wrapBlock) => {
         // Find all links inside this wrap block
         const links = Array.from(wrapBlock.querySelectorAll('a[href]'));
-        console.log(`[Announcement Embeds] Found ${links.length} links`);
 
         // Process links sequentially to handle async operations
         for (let linkIndex = 0; linkIndex < links.length; linkIndex++) {
@@ -264,35 +230,28 @@ export default apiInitializer("1.8.0", (api) => {
 
           // Skip if already processed
           if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media, .onebox-container')) {
-            console.log(`[Announcement Embeds] Link #${linkIndex + 1} already processed, skipping`);
-            continue; // Skip to next link, don't exit the loop!
+            continue;
           }
 
           // Skip heading anchor links (e.g., #heading-name)
           if (url.includes('#') && url.split('#')[0] === window.location.href.split('#')[0]) {
-            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is a heading anchor, skipping`);
             continue;
           }
 
           // Skip if link is inside a heading element
           if (link.closest('h1, h2, h3, h4, h5, h6')) {
-            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is inside a heading, skipping`);
             continue;
           }
 
           // Skip Discourse internal upload URLs (upload://xxxxx)
           if (url.startsWith('upload://') || url.includes('/upload://')) {
-            console.log(`[Announcement Embeds] Link #${linkIndex + 1} is a Discourse upload URL, skipping`);
             continue;
           }
 
           // Skip image links (links that contain an img element)
           if (link.querySelector('img')) {
-            console.log(`[Announcement Embeds] Link #${linkIndex + 1} contains an image element, skipping`);
             continue;
           }
-
-          console.log(`[Announcement Embeds] Analyzing link #${linkIndex + 1}:`, url);
 
           // Helper: Check if link is standalone (on its own line, not inline with text)
           const isStandaloneLink = (linkElement) => {
@@ -330,71 +289,42 @@ export default apiInitializer("1.8.0", (api) => {
           const isTopic = isDiscourseTopic(url);
           const isStandalone = isStandaloneLink(link);
 
-          console.log(`[Announcement Embeds] Detection:`, {
-            url: url.substring(0, 80) + '...',
-            isVideoFile: isVideo,
-            isHostedVideo: isHostedVideo,
-            isYouTube: /youtube\.com|youtu\.be/i.test(url),
-            isVimeo: /vimeo\.com/i.test(url),
-            isDiscourseTopic: isTopic,
-            isStandalone: isStandalone,
-          });
-
           // Priority 1: Discourse topics (use onebox API) - ONLY for standalone links
           if (isTopic && isStandalone) {
-            console.log("[Announcement Embeds] Fetching Discourse topic onebox (standalone link)");
-            embedElement = await createOnebox(url, link);
+            embedElement = await createOnebox(url);
           }
           // Priority 2: YouTube
           else if (/youtube\.com|youtu\.be/i.test(url)) {
-            console.log("[Announcement Embeds] Creating YouTube embed");
             embedElement = createYouTubeEmbed(url);
           }
           // Priority 3: Vimeo
           else if (/vimeo\.com/i.test(url)) {
-            console.log("[Announcement Embeds] Creating Vimeo embed");
             embedElement = createVimeoEmbed(url);
           }
           // Priority 4: Direct video files or hosted video
           else if (isVideo || isHostedVideo) {
-            console.log("[Announcement Embeds] Creating native video player");
             embedElement = createVideoPlayer(url);
           }
           // Priority 5: Try onebox for any other URL - ONLY for standalone links
           else if (isStandalone && (link.textContent.trim() === url || link.textContent.includes('http'))) {
-            console.log("[Announcement Embeds] Attempting onebox for generic standalone URL");
-            embedElement = await createOnebox(url, link);
+            embedElement = await createOnebox(url);
           }
 
           // If we created an embed, replace the link
           if (embedElement) {
-            console.log("[Announcement Embeds] Replacing link with embed");
-            console.log("[Announcement Embeds] Link element before replace:", link);
-            console.log("[Announcement Embeds] Link parent before replace:", link.parentElement);
-
             // For oneboxes, don't wrap again (already has container)
             if (embedElement.classList.contains('onebox-container')) {
-              console.log("[Announcement Embeds] Replacing with onebox container");
               link.replaceWith(embedElement);
-              console.log("[Announcement Embeds] Onebox HTML:", embedElement.outerHTML.substring(0, 300));
             } else {
               // Create wrapper for video embeds
-              console.log("[Announcement Embeds] Replacing with video wrapper");
               const wrapper = document.createElement("div");
               wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
               wrapper.appendChild(embedElement);
               link.replaceWith(wrapper);
             }
-
-            console.log("[Announcement Embeds] ✓ Embed created successfully");
-            console.log("[Announcement Embeds] Parent after replace:", embedElement.parentElement);
-          } else {
-            console.log("[Announcement Embeds] No embed created for this link");
           }
         }
       });
-
-      console.log("[Announcement Embeds] Processing complete");
     },
     {
       id: "rehydrate-wrap-embeds",
