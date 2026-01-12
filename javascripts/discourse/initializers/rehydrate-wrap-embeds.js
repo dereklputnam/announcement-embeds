@@ -201,7 +201,8 @@ export default apiInitializer("1.8.0", (api) => {
     async (elem) => {
       // Try multiple possible selectors for wrap=no-email blocks
       const selectors = [
-        '.wrap.no-email',           // Standard: <div class="wrap no-email">
+        '.d-wrap.no-email',         // Discourse standard: <div class="d-wrap no-email">
+        '.wrap.no-email',           // Legacy: <div class="wrap no-email">
         '.wrap[data-wrap="no-email"]', // Data attribute variant
         '[class*="no-email"]',      // Any class containing "no-email"
         '.no-email',                // Just the no-email class
