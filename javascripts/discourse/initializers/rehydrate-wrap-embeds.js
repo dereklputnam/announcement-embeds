@@ -2,6 +2,49 @@ import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
 
 export default apiInitializer("1.8.0", (api) => {
+  // FIX FOR DiscoTOC: Pre-process post HTML to unwrap wrap=no-email blocks
+  // DiscoTOC reads from post.cooked (raw HTML string), not the live DOM
+  // We need to unwrap before DiscoTOC parses the HTML
+  api.modifyPost((post) => {
+    if (post.cooked) {
+      // Use DOMParser to manipulate the HTML string
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(post.cooked, 'text/html');
+
+      // Find all wrap=no-email blocks
+      const selectors = [
+        '.wrap.no-email',
+        '.wrap[data-wrap="no-email"]',
+        '[class*="no-email"]',
+        '.no-email',
+        '[data-wrap*="no-email"]',
+      ];
+
+      let wrapBlocks = [];
+      for (const selector of selectors) {
+        const found = doc.querySelectorAll(selector);
+        if (found.length > 0) {
+          wrapBlocks = Array.from(found);
+          break;
+        }
+      }
+
+      // Unwrap each block
+      wrapBlocks.forEach((wrapBlock) => {
+        const parent = wrapBlock.parentNode;
+        while (wrapBlock.firstChild) {
+          parent.insertBefore(wrapBlock.firstChild, wrapBlock);
+        }
+        wrapBlock.remove();
+      });
+
+      // Update the cooked HTML with unwrapped version
+      if (wrapBlocks.length > 0) {
+        post.cooked = doc.body.innerHTML;
+      }
+    }
+  });
+
   // Helper: Check if URL is a video file
   function isVideoFile(url) {
     return /\.(mp4|mov|webm|m4v|avi|mkv|flv|ogv)$/i.test(url);
@@ -198,152 +241,114 @@ export default apiInitializer("1.8.0", (api) => {
 
   // Main decorator
   api.decorateCookedElement(
-    (elem) => {
-      // Try multiple possible selectors for wrap=no-email blocks
-      const selectors = [
-        '.wrap.no-email',           // Standard: <div class="wrap no-email">
-        '.wrap[data-wrap="no-email"]', // Data attribute variant
-        '[class*="no-email"]',      // Any class containing "no-email"
-        '.no-email',                // Just the no-email class
-        '[data-wrap*="no-email"]',  // Data attribute containing "no-email"
-      ];
+    async (elem) => {
+      // Note: wrap=no-email blocks are already unwrapped by modifyPost above
+      // So we just need to find and process video links in the content
 
-      let wrapBlocks = [];
-      for (const selector of selectors) {
-        const found = elem.querySelectorAll(selector);
-        if (found.length > 0) {
-          wrapBlocks = Array.from(found);
-          break;
+      // Find all links in the post
+      const links = Array.from(elem.querySelectorAll('a[href]'));
+
+      // Process links sequentially to handle async operations
+      for (let linkIndex = 0; linkIndex < links.length; linkIndex++) {
+        const link = links[linkIndex];
+        const url = link.href;
+
+        // Skip if already processed
+        if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media, .onebox-container')) {
+          continue;
+        }
+
+        // Skip heading anchor links (e.g., #heading-name)
+        if (url.includes('#') && url.split('#')[0] === window.location.href.split('#')[0]) {
+          continue;
+        }
+
+        // Skip if link is inside a heading element
+        if (link.closest('h1, h2, h3, h4, h5, h6')) {
+          continue;
+        }
+
+        // Skip Discourse internal upload URLs (upload://xxxxx)
+        if (url.startsWith('upload://') || url.includes('/upload://')) {
+          continue;
+        }
+
+        // Skip image links (links that contain an img element)
+        if (link.querySelector('img')) {
+          continue;
+        }
+
+        // Helper: Check if link is standalone (on its own line, not inline with text)
+        const isStandaloneLink = (linkElement) => {
+          const parent = linkElement.parentElement;
+          if (!parent) return false;
+
+          // Check if the link is in a paragraph by itself
+          if (parent.tagName === 'P') {
+            // Get all text nodes and elements in the paragraph
+            const children = Array.from(parent.childNodes);
+
+            // If paragraph only contains this link (and maybe whitespace), it's standalone
+            const hasOtherContent = children.some(node => {
+              if (node === linkElement) return false;
+              if (node.nodeType === Node.TEXT_NODE) {
+                return node.textContent.trim().length > 0;
+              }
+              if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR') {
+                return true;
+              }
+              return false;
+            });
+
+            return !hasOtherContent;
+          }
+
+          return false;
+        };
+
+        let embedElement = null;
+
+        // Check what type of media this is
+        const isVideo = isVideoFile(url);
+        const isHostedVideo = isVideoHostingPlatform(url);
+        const isTopic = isDiscourseTopic(url);
+        const isStandalone = isStandaloneLink(link);
+
+        // Priority 1: Discourse topics (use onebox API) - ONLY for standalone links
+        if (isTopic && isStandalone) {
+          embedElement = await createOnebox(url);
+        }
+        // Priority 2: YouTube
+        else if (/youtube\.com|youtu\.be/i.test(url)) {
+          embedElement = createYouTubeEmbed(url);
+        }
+        // Priority 3: Vimeo
+        else if (/vimeo\.com/i.test(url)) {
+          embedElement = createVimeoEmbed(url);
+        }
+        // Priority 4: Direct video files or hosted video
+        else if (isVideo || isHostedVideo) {
+          embedElement = createVideoPlayer(url);
+        }
+        // Priority 5: Try onebox for any other URL - ONLY for standalone links
+        else if (isStandalone && (link.textContent.trim() === url || link.textContent.includes('http'))) {
+          embedElement = await createOnebox(url);
+        }
+
+        // If we created an embed, replace the link
+        if (embedElement) {
+          // For oneboxes, don't wrap again (already has container)
+          if (embedElement.classList.contains('onebox-container')) {
+            link.replaceWith(embedElement);
+          } else {
+            // Create wrapper for video embeds
+            const wrapper = document.createElement("div");
+            wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
+            wrapper.appendChild(embedElement);
+            link.replaceWith(wrapper);
+          }
         }
       }
-
-      if (wrapBlocks.length === 0) return;
-
-      wrapBlocks.forEach(async (wrapBlock) => {
-        // FIX FOR DiscoTOC: Unwrap the wrap block to make headings direct descendants
-        // DiscoTOC looks for direct descendant headings (body > h1, body > h2, etc.)
-        // When content is wrapped inside a div, headings are not direct descendants
-        // Solution: Replace the wrap block with its contents, removing the wrapper div
-        // This makes headings direct children while preserving all content structure
-        // Note: The wrap tag's email filtering already happened server-side, so unwrapping
-        // in the browser doesn't affect email behavior.
-
-        // Find all links inside this wrap block BEFORE unwrapping
-        const links = Array.from(wrapBlock.querySelectorAll('a[href]'));
-
-        // Store reference to parent before unwrapping
-        const parent = wrapBlock.parentNode;
-
-        // Move all children of wrap block to be siblings (before the wrap block)
-        while (wrapBlock.firstChild) {
-          parent.insertBefore(wrapBlock.firstChild, wrapBlock);
-        }
-
-        // Remove the now-empty wrap block
-        wrapBlock.remove();
-
-        // Process links sequentially to handle async operations
-        for (let linkIndex = 0; linkIndex < links.length; linkIndex++) {
-          const link = links[linkIndex];
-          const url = link.href;
-
-          // Skip if already processed
-          if (link.closest('.media-embed-wrapper, .video-wrapper, .rehydrated-media, .onebox-container')) {
-            continue;
-          }
-
-          // Skip heading anchor links (e.g., #heading-name)
-          if (url.includes('#') && url.split('#')[0] === window.location.href.split('#')[0]) {
-            continue;
-          }
-
-          // Skip if link is inside a heading element
-          if (link.closest('h1, h2, h3, h4, h5, h6')) {
-            continue;
-          }
-
-          // Skip Discourse internal upload URLs (upload://xxxxx)
-          if (url.startsWith('upload://') || url.includes('/upload://')) {
-            continue;
-          }
-
-          // Skip image links (links that contain an img element)
-          if (link.querySelector('img')) {
-            continue;
-          }
-
-          // Helper: Check if link is standalone (on its own line, not inline with text)
-          const isStandaloneLink = (linkElement) => {
-            const parent = linkElement.parentElement;
-            if (!parent) return false;
-
-            // Check if the link is in a paragraph by itself
-            if (parent.tagName === 'P') {
-              // Get all text nodes and elements in the paragraph
-              const children = Array.from(parent.childNodes);
-
-              // If paragraph only contains this link (and maybe whitespace), it's standalone
-              const hasOtherContent = children.some(node => {
-                if (node === linkElement) return false;
-                if (node.nodeType === Node.TEXT_NODE) {
-                  return node.textContent.trim().length > 0;
-                }
-                if (node.nodeType === Node.ELEMENT_NODE && node.tagName !== 'BR') {
-                  return true;
-                }
-                return false;
-              });
-
-              return !hasOtherContent;
-            }
-
-            return false;
-          };
-
-          let embedElement = null;
-
-          // Check what type of media this is
-          const isVideo = isVideoFile(url);
-          const isHostedVideo = isVideoHostingPlatform(url);
-          const isTopic = isDiscourseTopic(url);
-          const isStandalone = isStandaloneLink(link);
-
-          // Priority 1: Discourse topics (use onebox API) - ONLY for standalone links
-          if (isTopic && isStandalone) {
-            embedElement = await createOnebox(url);
-          }
-          // Priority 2: YouTube
-          else if (/youtube\.com|youtu\.be/i.test(url)) {
-            embedElement = createYouTubeEmbed(url);
-          }
-          // Priority 3: Vimeo
-          else if (/vimeo\.com/i.test(url)) {
-            embedElement = createVimeoEmbed(url);
-          }
-          // Priority 4: Direct video files or hosted video
-          else if (isVideo || isHostedVideo) {
-            embedElement = createVideoPlayer(url);
-          }
-          // Priority 5: Try onebox for any other URL - ONLY for standalone links
-          else if (isStandalone && (link.textContent.trim() === url || link.textContent.includes('http'))) {
-            embedElement = await createOnebox(url);
-          }
-
-          // If we created an embed, replace the link
-          if (embedElement) {
-            // For oneboxes, don't wrap again (already has container)
-            if (embedElement.classList.contains('onebox-container')) {
-              link.replaceWith(embedElement);
-            } else {
-              // Create wrapper for video embeds
-              const wrapper = document.createElement("div");
-              wrapper.classList.add('media-embed-wrapper', 'rehydrated-media');
-              wrapper.appendChild(embedElement);
-              link.replaceWith(wrapper);
-            }
-          }
-        }
-      });
     },
     {
       id: "rehydrate-wrap-embeds",
