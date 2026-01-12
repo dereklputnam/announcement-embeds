@@ -2,49 +2,6 @@ import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
 
 export default apiInitializer("1.8.0", (api) => {
-  // FIX FOR DiscoTOC: Pre-process post HTML to unwrap wrap=no-email blocks
-  // DiscoTOC reads from post.cooked (raw HTML string), not the live DOM
-  // We need to unwrap before DiscoTOC parses the HTML
-  api.modifyPost((post) => {
-    if (post.cooked) {
-      // Use DOMParser to manipulate the HTML string
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(post.cooked, 'text/html');
-
-      // Find all wrap=no-email blocks
-      const selectors = [
-        '.wrap.no-email',
-        '.wrap[data-wrap="no-email"]',
-        '[class*="no-email"]',
-        '.no-email',
-        '[data-wrap*="no-email"]',
-      ];
-
-      let wrapBlocks = [];
-      for (const selector of selectors) {
-        const found = doc.querySelectorAll(selector);
-        if (found.length > 0) {
-          wrapBlocks = Array.from(found);
-          break;
-        }
-      }
-
-      // Unwrap each block
-      wrapBlocks.forEach((wrapBlock) => {
-        const parent = wrapBlock.parentNode;
-        while (wrapBlock.firstChild) {
-          parent.insertBefore(wrapBlock.firstChild, wrapBlock);
-        }
-        wrapBlock.remove();
-      });
-
-      // Update the cooked HTML with unwrapped version
-      if (wrapBlocks.length > 0) {
-        post.cooked = doc.body.innerHTML;
-      }
-    }
-  });
-
   // Helper: Check if URL is a video file
   function isVideoFile(url) {
     return /\.(mp4|mov|webm|m4v|avi|mkv|flv|ogv)$/i.test(url);
@@ -242,8 +199,32 @@ export default apiInitializer("1.8.0", (api) => {
   // Main decorator
   api.decorateCookedElement(
     async (elem) => {
-      // Note: wrap=no-email blocks are already unwrapped by modifyPost above
-      // So we just need to find and process video links in the content
+      // Find wrap=no-email blocks and unwrap them for DiscoTOC compatibility
+      const selectors = [
+        '.wrap.no-email',
+        '.wrap[data-wrap="no-email"]',
+        '[class*="no-email"]',
+        '.no-email',
+        '[data-wrap*="no-email"]',
+      ];
+
+      let wrapBlocks = [];
+      for (const selector of selectors) {
+        const found = elem.querySelectorAll(selector);
+        if (found.length > 0) {
+          wrapBlocks = Array.from(found);
+          break;
+        }
+      }
+
+      // Unwrap each wrap block
+      wrapBlocks.forEach((wrapBlock) => {
+        const parent = wrapBlock.parentNode;
+        while (wrapBlock.firstChild) {
+          parent.insertBefore(wrapBlock.firstChild, wrapBlock);
+        }
+        wrapBlock.remove();
+      });
 
       // Find all links in the post
       const links = Array.from(elem.querySelectorAll('a[href]'));
