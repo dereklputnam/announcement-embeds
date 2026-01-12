@@ -220,6 +220,21 @@ export default apiInitializer("1.8.0", (api) => {
       if (wrapBlocks.length === 0) return;
 
       wrapBlocks.forEach(async (wrapBlock) => {
+        // FIX FOR DiscoTOC: Hoist headings out of wrap blocks
+        // DiscoTOC looks for direct descendant headings (body > h1, body > h2, etc.)
+        // When headings are wrapped inside a div, they're not direct descendants
+        // So we move them outside the wrap block while keeping other content wrapped
+        const headings = wrapBlock.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headings.forEach((heading) => {
+          // Insert heading before the wrap block
+          wrapBlock.parentNode.insertBefore(heading, wrapBlock);
+        });
+
+        // If the wrap block is now empty or only has whitespace, remove it
+        if (!wrapBlock.textContent.trim() && wrapBlock.querySelectorAll('*').length === 0) {
+          wrapBlock.remove();
+          return; // Skip processing this empty wrap block
+        }
         // Find all links inside this wrap block
         const links = Array.from(wrapBlock.querySelectorAll('a[href]'));
 
