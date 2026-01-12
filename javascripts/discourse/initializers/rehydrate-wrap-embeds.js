@@ -220,23 +220,27 @@ export default apiInitializer("1.8.0", (api) => {
       if (wrapBlocks.length === 0) return;
 
       wrapBlocks.forEach(async (wrapBlock) => {
-        // FIX FOR DiscoTOC: Hoist headings out of wrap blocks
+        // FIX FOR DiscoTOC: Unwrap the wrap block to make headings direct descendants
         // DiscoTOC looks for direct descendant headings (body > h1, body > h2, etc.)
-        // When headings are wrapped inside a div, they're not direct descendants
-        // So we move them outside the wrap block while keeping other content wrapped
-        const headings = wrapBlock.querySelectorAll('h1, h2, h3, h4, h5, h6');
-        headings.forEach((heading) => {
-          // Insert heading before the wrap block
-          wrapBlock.parentNode.insertBefore(heading, wrapBlock);
-        });
+        // When content is wrapped inside a div, headings are not direct descendants
+        // Solution: Replace the wrap block with its contents, removing the wrapper div
+        // This makes headings direct children while preserving all content structure
+        // Note: The wrap tag's email filtering already happened server-side, so unwrapping
+        // in the browser doesn't affect email behavior.
 
-        // If the wrap block is now empty or only has whitespace, remove it
-        if (!wrapBlock.textContent.trim() && wrapBlock.querySelectorAll('*').length === 0) {
-          wrapBlock.remove();
-          return; // Skip processing this empty wrap block
-        }
-        // Find all links inside this wrap block
+        // Find all links inside this wrap block BEFORE unwrapping
         const links = Array.from(wrapBlock.querySelectorAll('a[href]'));
+
+        // Store reference to parent before unwrapping
+        const parent = wrapBlock.parentNode;
+
+        // Move all children of wrap block to be siblings (before the wrap block)
+        while (wrapBlock.firstChild) {
+          parent.insertBefore(wrapBlock.firstChild, wrapBlock);
+        }
+
+        // Remove the now-empty wrap block
+        wrapBlock.remove();
 
         // Process links sequentially to handle async operations
         for (let linkIndex = 0; linkIndex < links.length; linkIndex++) {
